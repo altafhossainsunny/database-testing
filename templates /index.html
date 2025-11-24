@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Crop App - Auth</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Set a pleasant, dark background and ensure text uses the Inter font */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937; /* Darker gray background */
+            color: #e5e7eb; /* Light gray text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Application Container -->
+    <div id="app-container" class="w-full max-w-lg mx-4 bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 transition duration-300">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-indigo-400">Secure Crop Dashboard</h1>
+            <p id="auth-state-message" class="mt-2 text-sm text-gray-400">Please sign in to continue.</p>
+        </header>
+
+        <!-- Authentication View (Login/Register) -->
+        <div id="auth-view">
+            
+            <!-- Tabs -->
+            <div class="flex mb-6 border-b border-gray-700">
+                <button id="tab-login" onclick="showView('login')" class="flex-1 py-3 text-center text-sm font-medium border-b-2 transition duration-200" 
+                        style="border-color: #6366f1; color: #6366f1;">
+                    Login
+                </button>
+                <button id="tab-register" onclick="showView('register')" class="flex-1 py-3 text-center text-sm font-medium text-gray-400 border-b-2 border-transparent hover:border-gray-600 transition duration-200">
+                    Register
+                </button>
+            </div>
+
+            <!-- Message Area -->
+            <div id="message-box" class="hidden p-3 mb-4 rounded-lg text-sm transition-all duration-300"></div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-300 mb-1">Email Address</label>
+                    <input type="email" id="login-email" required class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-50 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                    <input type="password" id="login-password" required class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-50 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <button type="submit" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-semibold shadow-md transition duration-200">
+                    Sign In
+                </button>
+            </form>
+
+            <!-- Register Form (Initially Hidden) -->
+            <form id="register-form" class="space-y-6 hidden">
+                <div>
+                    <label for="register-email" class="block text-sm font-medium text-gray-300 mb-1">Email Address</label>
+                    <input type="email" id="register-email" required class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-50 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="register-password" class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                    <input type="password" id="register-password" required class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-50 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <button type="submit" class="w-full py-3 px-4 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold shadow-md transition duration-200">
+                    Create Account
+                </button>
+            </form>
+        </div>
+
+        <!-- Dashboard View (Initially Hidden) -->
+        <div id="dashboard-view" class="hidden space-y-6">
+            <div class="bg-gray-700 p-6 rounded-xl">
+                <h2 class="text-xl font-bold text-white mb-2">Welcome, <span id="user-display-name" class="text-indigo-400">User</span>!</h2>
+                <p class="text-gray-300 text-sm">You are successfully logged in to the Secure Crop DB system.</p>
+                <p id="user-id-display" class="text-xs mt-2 text-gray-400"></p>
+            </div>
+            
+            <h3 class="text-lg font-semibold text-gray-300 border-b border-gray-700 pb-2">All Registered Users</h3>
+            <ul id="users-list" class="space-y-2 max-h-48 overflow-y-auto pr-2">
+                <!-- User list will be populated here -->
+                <li class="text-gray-400 italic">Loading users...</li>
+            </ul>
+
+            <button id="logout-button" class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg text-white font-semibold transition duration-200">
+                Logout
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration ---
+        // Make sure this matches your Flask server's address!
+        const API_BASE_URL = 'http://127.0.0.1:5000'; 
+
+        // --- DOM Elements ---
+        const authView = document.getElementById('auth-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const messageBox = document.getElementById('message-box');
+        const authStateMessage = document.getElementById('auth-state-message');
+        const userDisplayName = document.getElementById('user-display-name');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const usersList = document.getElementById('users-list');
+
+        let currentUser = null; // State variable to hold logged-in user data
+
+        // --- Utility Functions ---
+
+        /** Shows an alert message in the designated box. */
+        function showAlert(message, type = 'success') {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-800', 'bg-green-800');
+            
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-800', 'text-white');
+            } else {
+                messageBox.classList.add('bg-green-800', 'text-white');
+            }
+            // Clear message after 5 seconds
+            setTimeout(clearAlert, 5000);
+        }
+
+        /** Clears the alert message. */
+        function clearAlert() {
+            messageBox.classList.add('hidden');
+            messageBox.textContent = '';
+        }
+
+        /** Toggles between Login and Register forms. */
+        function showView(view) {
+            clearAlert();
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const loginTab = document.getElementById('tab-login');
+            const registerTab = document.getElementById('tab-register');
+
+            if (view === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                loginTab.style.borderColor = '#6366f1';
+                loginTab.style.color = '#6366f1';
+                registerTab.style.borderColor = 'transparent';
+                registerTab.style.color = '#9ca3af';
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                loginTab.style.borderColor = 'transparent';
+                loginTab.style.color = '#9ca3af';
+                registerTab.style.borderColor = '#10b981'; /* Green for register */
+                registerTab.style.color = '#10b981';
+            }
+        }
+
+        /** Fetches the list of all users from the backend. */
+        async function fetchUsers() {
+            usersList.innerHTML = '<li class="text-gray-400 italic">Fetching users...</li>';
+            try {
+                const response = await fetch(`${API_BASE_URL}/users`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch users');
+                }
+                const users = await response.json();
+
+                usersList.innerHTML = ''; // Clear existing list
+                
+                if (users.length === 0) {
+                    usersList.innerHTML = '<li class="text-gray-400 italic">No users registered yet.</li>';
+                    return;
+                }
+
+                users.forEach(user => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'flex justify-between items-center p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition duration-150';
+                    listItem.innerHTML = `
+                        <span class="font-medium text-gray-200">${user.name}</span>
+                        <span class="text-xs text-indigo-300">ID: ${user.id}</span>
+                    `;
+                    usersList.appendChild(listItem);
+                });
+
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                usersList.innerHTML = `<li class="text-red-400">Error: ${error.message}. Is the Flask server running?</li>`;
+            }
+        }
+
+        /** Updates the UI to show the dashboard view. */
+        function enterDashboard(user) {
+            currentUser = user;
+            authView.classList.add('hidden');
+            dashboardView.classList.remove('hidden');
+            
+            // The backend sends 'name' (which is full_name or email) and 'email'
+            userDisplayName.textContent = user.name;
+            // Displaying the user ID and Email
+            userIdDisplay.innerHTML = `User ID: ${user.id} <span class="ml-4 text-xs text-gray-500">Email: ${user.email}</span>`; 
+            authStateMessage.textContent = "Welcome to your Secure Crop Dashboard.";
+            clearAlert();
+
+            fetchUsers();
+        }
+
+        /** Updates the UI to show the authentication view. */
+        function exitDashboard() {
+            currentUser = null;
+            dashboardView.classList.add('hidden');
+            authView.classList.remove('hidden');
+            authStateMessage.textContent = "Please sign in or register.";
+            
+            // Reset forms and ensure we are back on the login view
+            document.getElementById('login-form').reset();
+            document.getElementById('register-form').reset();
+            showView('login');
+        }
+
+        // --- Event Handlers ---
+
+        /** Handles user registration submission. */
+        async function handleRegister(event) {
+            event.preventDefault();
+            clearAlert();
+
+            const email = document.getElementById('register-email').value.trim();
+            const password = document.getElementById('register-password').value.trim();
+            
+            if (!email || !password) {
+                showAlert('Please fill in both email and password.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showAlert(result.message + ' You can now log in.', 'success');
+                    showView('login');
+                } else {
+                    showAlert(`Registration failed: ${result.message || 'Server error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Registration API call failed:', error);
+                showAlert('Network error or Flask server is not running. Check console for details.', 'error');
+            }
+        }
+
+        /** Handles user login submission. */
+        async function handleLogin(event) {
+            event.preventDefault();
+            clearAlert();
+
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+
+            if (!email || !password) {
+                showAlert('Please fill in both email and password.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showAlert("Login successful! Redirecting...", 'success');
+                    // result.user contains { id, email, name } from the backend
+                    enterDashboard(result.user);
+                } else {
+                    showAlert(result.message || 'Login failed due to server error.', 'error');
+                }
+            } catch (error) {
+                console.error('Login API call failed:', error);
+                showAlert('Network error or Flask server is not running. Check console for details.', 'error');
+            }
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Attach event listeners to forms
+            document.getElementById('register-form').addEventListener('submit', handleRegister);
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
+            document.getElementById('logout-button').addEventListener('click', exitDashboard);
+            
+            // Default view is login
+            showView('login');
+        });
+    </script>
+
+</body>
+</html>
